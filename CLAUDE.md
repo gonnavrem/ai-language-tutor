@@ -48,7 +48,7 @@ Dexie + `dexie-react-hooks` (`liveQuery`) only — no Redux/Zustand/TanStack Que
 ## Build milestones
 
 - [x] M0 — Project scaffold (Vite/React/TS/Tailwind/Vitest/oxlint/Prettier/Capacitor init)
-- [ ] M1 — Template config layer (fixed language pair + level system)
+- [x] M1 — Template config layer (fixed language pair + level system)
 - [ ] M2 — Persistence layer (Dexie schema)
 - [ ] M3 — AI provider layer + BYOK settings UI
 - [ ] M4 — Exercise generation flow
