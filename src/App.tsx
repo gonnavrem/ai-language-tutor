@@ -1,7 +1,9 @@
+import { ProviderSettings } from './components/ProviderSettings'
+
 function App() {
   return (
-    <div className="flex min-h-svh items-center justify-center">
-      <h1 className="text-2xl font-medium">Language Tutor</h1>
+    <div className="min-h-svh">
+      <ProviderSettings />
     </div>
   )
 }

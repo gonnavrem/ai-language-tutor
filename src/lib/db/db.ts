@@ -29,15 +29,26 @@ export interface EvaluationRecord {
   createdAt: Date
 }
 
+/** Always stored as the single row with id 1 — one provider config at a time. */
+export interface SecureConfigRecord {
+  id: number
+  ciphertext: string
+  iv: string
+}
+
 class AppDatabase extends Dexie {
   exercises!: EntityTable<ExerciseRecord, 'id'>
   evaluations!: EntityTable<EvaluationRecord, 'id'>
+  secureConfig!: EntityTable<SecureConfigRecord, 'id'>
 
   constructor() {
     super('language-tutor')
     this.version(1).stores({
       exercises: '++id, levelId, createdAt',
       evaluations: '++id, exerciseId, createdAt',
+    })
+    this.version(2).stores({
+      secureConfig: 'id',
     })
   }
 }

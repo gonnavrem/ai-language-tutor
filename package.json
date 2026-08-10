@@ -14,7 +14,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.0",
     "@tailwindcss/vite": "^4.3.3",
+    "capacitor-secure-storage-plugin": "^0.13.0",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "lucide-react": "^1.28.0",
@@ -26,7 +28,6 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
-    "@capacitor/core": "^8.5.0",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.3",
