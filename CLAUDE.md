@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+See `DECISIONS.md` for the reasoning behind non-obvious architectural choices. Add an entry there whenever a real trade-off gets settled — as it happens, not batched at the end of a session.
+
 ## Commands
 
 - `npm run dev` — start the Vite dev server
@@ -51,7 +53,7 @@ Dexie + `dexie-react-hooks` (`liveQuery`) only — no Redux/Zustand/TanStack Que
 - [x] M1 — Template config layer (fixed language pair + level system)
 - [x] M2 — Persistence layer (Dexie schema)
 - [x] M3 — AI provider layer + BYOK settings UI
-- [ ] M4 — Exercise generation flow
+- [x] M4 — Exercise generation flow
 - [ ] M5 — Translation evaluation flow
 - [ ] M6 — History/review view
 - [ ] M7 — Mobile packaging (Capacitor Android → APK)
