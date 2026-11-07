@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/db'
 import { secureStorage } from '../secureStorage'
 import { appConfig } from '../../config'
-import { loadCurrentExercise } from './currentExercise'
+import { loadCurrentExercise, saveCurrentExercise } from './currentExercise'
 
 const generateStructured = vi.fn()
 
@@ -28,6 +28,8 @@ let requestExercise: typeof import('./requestExercise').requestExercise
 beforeEach(async () => {
   localStorage.clear()
   await db.secureConfig.clear()
+  await db.exercises.clear()
+  await db.evaluations.clear()
   generateStructured.mockReset()
   await secureStorage.setProviderConfig({
     providerId: 'anthropic',
@@ -69,6 +71,48 @@ describe('requestExercise', () => {
 
     expect(result.sentence).toBe('Second.')
     expect(loadCurrentExercise()?.sentence).toBe('Second.')
+  })
+
+  it('discards an unevaluated exercise without persisting it to Dexie', async () => {
+    generateStructured.mockResolvedValue(sentenceResult('First.'))
+    await requestExercise(levelA)
+
+    generateStructured.mockResolvedValue(sentenceResult('Second.'))
+    await requestExercise(levelB)
+
+    expect(await db.exercises.count()).toBe(0)
+    expect(await db.evaluations.count()).toBe(0)
+  })
+
+  it('flushes an evaluated exercise to exercises + evaluations before replacing it', async () => {
+    generateStructured.mockResolvedValue(sentenceResult('First.'))
+    const first = await requestExercise(levelA)
+    saveCurrentExercise({
+      ...first,
+      userTranslation: 'Primero.',
+      evaluation: {
+        scores: { meaning: 5, grammar: 4, naturalness: 5, vocabulary: 5 },
+        issues: ['Minor article error.'],
+        alternatives: [],
+        aiProvider: 'anthropic',
+        aiModel: 'claude-test',
+      },
+    })
+
+    generateStructured.mockResolvedValue(sentenceResult('Second.'))
+    await requestExercise(levelB)
+
+    const exercises = await db.exercises.toArray()
+    expect(exercises).toHaveLength(1)
+    expect(exercises[0].sentence).toBe('First.')
+
+    const evaluations = await db.evaluations
+      .where('exerciseId')
+      .equals(exercises[0].id)
+      .toArray()
+    expect(evaluations).toHaveLength(1)
+    expect(evaluations[0].userTranslation).toBe('Primero.')
+    expect(evaluations[0].scores.grammar).toBe(4)
   })
 
   it('leaves the current exercise untouched when generation fails', async () => {
@@ -150,8 +194,11 @@ describe('requestExercise', () => {
     await waitForPendingCount(2)
 
     // A's commit triggers a background prefetch fill (also for A) before B
-    // is allowed to start.
-    expect(pending.map((p) => p.levelId)).toEqual([levelA.id, levelA.id])
+    // is allowed to start — its call is issued second, i.e. before B's own
+    // (index-based rather than a full-array snapshot, since flushing the
+    // outgoing exercise now awaits a promise — see DECISIONS.md M5 — so B's
+    // call may already be in flight by the time this poll observes count 2).
+    expect(pending[1].levelId).toBe(levelA.id)
 
     pending[1].resolve(sentenceResult('BufferedForA.'))
     await waitForPendingCount(3)

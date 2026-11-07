@@ -1,7 +1,12 @@
 import type { Level } from '../../config'
 import { createProvider, type AIProvider } from '../ai'
 import { secureStorage } from '../secureStorage'
-import { discardCurrentExercise, saveCurrentExercise } from './currentExercise'
+import { db } from '../db/db'
+import {
+  discardCurrentExercise,
+  loadCurrentExercise,
+  saveCurrentExercise,
+} from './currentExercise'
 import { generateExerciseSentence } from './generateExercise'
 import {
   NoProviderConfiguredError,
@@ -33,6 +38,41 @@ function fillPrefetchBuffer(
   prefetchBuffer = { levelId: level.id, providerId, model, promise }
 }
 
+/**
+ * The outgoing exercise is persisted to Dexie only if it was solved
+ * (`evaluation` is set) — an unevaluated exercise has no evaluative value
+ * and is simply discarded, per DECISIONS.md M4/M5.
+ */
+async function flushOrDiscardCurrentExercise(): Promise<void> {
+  const outgoing = loadCurrentExercise()
+  const evaluation = outgoing?.evaluation
+
+  if (outgoing && evaluation) {
+    await db.transaction('rw', db.exercises, db.evaluations, async () => {
+      const exerciseId = await db.exercises.add({
+        sentence: outgoing.sentence,
+        levelId: outgoing.levelId,
+        grammarPoints: outgoing.grammarPoints,
+        aiProvider: outgoing.aiProvider,
+        aiModel: outgoing.aiModel,
+        createdAt: new Date(outgoing.createdAt),
+      })
+      await db.evaluations.add({
+        exerciseId,
+        userTranslation: outgoing.userTranslation ?? '',
+        scores: evaluation.scores,
+        issues: evaluation.issues,
+        alternatives: evaluation.alternatives,
+        aiProvider: evaluation.aiProvider,
+        aiModel: evaluation.aiModel,
+        createdAt: new Date(),
+      })
+    })
+  }
+
+  discardCurrentExercise()
+}
+
 async function requestExerciseInternal(level: Level): Promise<CurrentExercise> {
   const config = await secureStorage.getProviderConfig()
   if (!config) throw new NoProviderConfiguredError()
@@ -60,10 +100,7 @@ async function requestExerciseInternal(level: Level): Promise<CurrentExercise> {
     model = config.model
   }
 
-  // M4 has no way to solve an exercise yet, so the outgoing one is always
-  // abandoned here. M5 adds an `evaluation` field to CurrentExercise and
-  // flushes to Dexie (exercises + evaluations) in that case instead.
-  discardCurrentExercise()
+  await flushOrDiscardCurrentExercise()
 
   const next: CurrentExercise = {
     sentence: sentence.sentence,

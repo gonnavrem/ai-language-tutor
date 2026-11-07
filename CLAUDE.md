@@ -22,7 +22,7 @@ This is a **template**, not a multi-language product: each deployment is hard-co
 
 1. The AI receives source language, target language, and a level, and returns a sentence written in the _source_ language whose grammar/vocabulary is adapted to the target level. The grammar points being tested are included in the JSON response but hidden from the user (only the sentence is shown), to avoid biasing the translation attempt.
 2. The user submits a translation into the target language.
-3. The AI evaluates the translation: scores from 1–10 for meaning, grammar, naturalness, and vocabulary; concise explanations of any real issues; better alternative translations addressing those issues. Evaluation should judge overall meaning/intent the way a teacher would, not literal word-for-word matching — some flexibility in vocabulary and grammatical structure is expected and correct.
+3. The AI evaluates the translation: scores from 1–5 for meaning, grammar, naturalness, and vocabulary; concise explanations of any real issues; better alternative translations addressing those issues. Evaluation should judge overall meaning/intent the way a teacher would, not literal word-for-word matching — some flexibility in vocabulary and grammatical structure is expected and correct.
 
 All exercises and evaluations are persisted locally (Dexie/IndexedDB) — this is a local-first app with no backend.
 
@@ -54,7 +54,7 @@ Dexie + `dexie-react-hooks` (`liveQuery`) only — no Redux/Zustand/TanStack Que
 - [x] M2 — Persistence layer (Dexie schema)
 - [x] M3 — AI provider layer + BYOK settings UI
 - [x] M4 — Exercise generation flow
-- [ ] M5 — Translation evaluation flow
+- [x] M5 — Translation evaluation flow
 - [ ] M6 — History/review view
 - [ ] M7 — Mobile packaging (Capacitor Android → APK)
 - [ ] M8 — PWA packaging

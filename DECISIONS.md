@@ -118,3 +118,92 @@ records the `providerId`/`model` it was generated with, not just the level:
 provider settings can change between a background fill and its consumption,
 and `CurrentExercise.aiProvider/aiModel` must reflect what actually
 produced the sentence.
+
+## M5 — Translation evaluation flow
+
+**Evaluation categories are scored 1–5, not 1–10.** Coarser bands are
+noticeably more consistent for an LLM rater than a 10-point scale, which
+invites invented distinctions between e.g. a 6 and a 7 that aren't real.
+The rubric judges intent/fidelity over literal word matching, per
+CLAUDE.md's "judge overall meaning/intent the way a teacher would" —
+full band-by-band criteria (kept here as the reference; the prompt itself
+uses the compact one-line-per-category form in `evaluateTranslation.ts`
+to keep per-call token cost down, since the user pays for it via their own
+key):
+
+1. **Meaning** (semantic fidelity/intent, no penalty for style): 5 =
+   intention and all nuance intact; 4 = main meaning intact, a secondary
+   nuance or minor emphasis lost; 3 = incomplete/distorted message — a
+   relevant piece of information is missing or the pragmatic intent is
+   altered, though the base idea is still recognizable; 2 = serious
+   semantic error — inverted subject/object relation, wrongly
+   added/omitted negation, or a critical false friend; 1 = unrecognizable,
+   incomprehensible, or contradicts the original.
+2. **Grammar** (morphosyntactic correctness in the target language,
+   judged in isolation): 5 = flawless; 4 = one minor local error
+   (agreement, article, preposition) that doesn't affect comprehension;
+   3 = two minor errors, or one clear structural error (wrong tense/mood,
+   anomalous word order), noticeable but understandable; 2 = multiple
+   errors or serious structural failures that require rereading; 1 =
+   severe syntactic breakdown.
+3. **Naturalness** (fluency, collocations, idiomaticity — native-sounding
+   vs. robotic calque): 5 = fully idiomatic; 4 = mostly natural, with a
+   slightly rigid or infrequent turn of phrase; 3 = understandable but
+   with an evident calque from the source language ("literal
+   translation"); 2 = very forced, word combinations a native speaker
+   would never use naturally; 1 = robotic, word-for-word, borders on
+   absurd.
+4. **Vocabulary** (lexical precision and register, judged in isolation —
+   if a wrong term wrecks the overall meaning, that impact is scored
+   under Meaning, not here): 5 = precise, varied, register-appropriate;
+   4 = valid but generic or suboptimal word choice; 3 = evident lexical
+   imprecision (term out of context or clearly wrong register); 2 =
+   incorrect vocabulary or a repeated false friend; 1 = invented terms,
+   wrong-language terms, or absurd choices.
+
+**The overall score is computed client-side, never by the AI.**
+`meaning×0.4 + grammar×0.25 + naturalness×0.2 + vocabulary×0.15`, capped
+at `meaning + 0.5` and rounded to the nearest 0.5 (half-stars allowed for
+overall; category scores stay strict integers) — see
+`evaluationScore.ts`. Computing it in the app guarantees the weighting is
+actually applied correctly, keeps the AI from having to do arithmetic,
+and keeps `EvaluationResultSchema` — the AI's own output shape — down to
+just the four integers plus `issues`/`alternatives`. The cap exists so a
+translation with broken meaning can't score well overall just by being
+grammatically clean: without it, `meaning=2` with everything else at 5
+would weight out to 3.8; the cap pulls that down to 2.5.
+
+**Evaluation only flags issues for a category scoring ≤3, and only skips
+alternatives when all four categories are 5.** A 4 is a valid
+translation with cosmetic room for improvement, not an error worth
+frustrating the learner over — flagging it as an "issue" would
+contradict the "judge intent, not literalism" principle above.
+
+**No editing/resubmitting after evaluation.** Once `CurrentExercise.
+evaluation` is set, the translation is locked — this is also what "solved"
+means for the M4 discard-vs-persist rule (an exercise flushes to Dexie
+only if `evaluation` is present). A "keep discussing this exercise"
+follow-up mode is a plausible future feature but explicitly out of scope
+here, so there's no in-between "evaluated but still editable" state to
+design for.
+
+**`submitEvaluation` has no request queue, unlike `requestExercise`.**
+It doesn't touch the prefetch buffer or any other shared mutable state,
+so the M4 queue's reason for existing doesn't apply. Concurrency is
+instead handled by the UI simply disabling regenerate/level-select/submit
+while any request (generation or evaluation) is in flight — cheaper than
+merging queues or introducing response versioning for a race that a
+disabled button already prevents.
+
+**The in-progress translation draft is persisted into `CurrentExercise`
+(localStorage), debounced ~300ms.** `CurrentExercise` already survives a
+refresh (M4); letting the untimed draft survive one too is a small
+extension of the same mechanism, not new infrastructure — worth it for
+the quality-of-life win of not losing typed-but-unsubmitted work.
+
+**Evaluation prompts don't take the exercise's level as input.** The
+rubric judges translation quality in absolute terms; the level already
+shaped the source sentence's difficulty during generation
+(`generateExercise.ts`), so re-passing it to evaluation would be a
+level-relative grading curve that CLAUDE.md's scoring criteria don't
+call for.
