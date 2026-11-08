@@ -19,12 +19,12 @@ vi.mock('../ai', async (importOriginal) => {
 const level = appConfig.levelSystem.levels[0]
 
 const pendingExercise: CurrentExercise = {
+  id: crypto.randomUUID(),
   sentence: 'The cat sleeps.',
   levelId: level.id,
   grammarPoints: ['present simple'],
   aiProvider: 'anthropic',
   aiModel: 'claude-test',
-  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
 function evaluationResult() {
@@ -66,6 +66,7 @@ describe('submitEvaluation', () => {
       ...evaluationResult(),
       aiProvider: 'anthropic',
       aiModel: 'claude-test',
+      solvedAt: expect.any(String),
     })
     expect(loadCurrentExercise()).toEqual(result)
   })

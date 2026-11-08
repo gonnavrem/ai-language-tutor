@@ -55,6 +55,7 @@ Dexie + `dexie-react-hooks` (`liveQuery`) only — no Redux/Zustand/TanStack Que
 - [x] M3 — AI provider layer + BYOK settings UI
 - [x] M4 — Exercise generation flow
 - [x] M5 — Translation evaluation flow
-- [ ] M6 — History/review view
-- [ ] M7 — Mobile packaging (Capacitor Android → APK)
-- [ ] M8 — PWA packaging
+- [x] M6 — History/review view
+- [ ] M7 — Data export/import (versioned, Zod-validated JSON; excludes API keys)
+- [ ] M8 — Mobile packaging (Capacitor Android → APK)
+- [ ] M9 — PWA packaging

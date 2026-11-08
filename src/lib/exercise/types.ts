@@ -27,28 +27,54 @@ export const EvaluationResultSchema = z.object({
 })
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>
 
+/** An evaluation plus who produced it. */
+const AttributedEvaluationSchema = EvaluationResultSchema.extend({
+  aiProvider: z.string().min(1),
+  aiModel: z.string().min(1),
+})
+
+/**
+ * Fields shared by the on-screen exercise and its stored record — the single
+ * source for both shapes (see DECISIONS.md M6, "one schema"). `id` is a UUID
+ * assigned when the exercise is created, not by Dexie, so persisting it is
+ * idempotent (`put`) and ids stay stable across devices for M7 import.
+ */
+const ExerciseBaseSchema = z.object({
+  id: z.uuid(),
+  sentence: z.string().min(1),
+  levelId: z.string().min(1),
+  grammarPoints: z.array(z.string()),
+  aiProvider: z.string().min(1),
+  aiModel: z.string().min(1),
+})
+
 /**
  * The exercise currently on screen. Persisted to localStorage, not Dexie,
  * until it's superseded by the next one (see DECISIONS.md M4). One shape
  * covers both pending and solved: `userTranslation` doubles as the
  * in-progress draft and the final submitted translation, and `evaluation` is
  * only ever set after a successful evaluation call — its presence is what
- * "solved" means (see DECISIONS.md M5).
+ * "solved" means (see DECISIONS.md M5). `solvedAt` (ISO string) travels
+ * inside it and is hoisted to the Dexie record on flush (DECISIONS.md M6).
  */
-export const CurrentExerciseSchema = z.object({
-  sentence: z.string().min(1),
-  levelId: z.string().min(1),
-  grammarPoints: z.array(z.string()),
-  aiProvider: z.string().min(1),
-  aiModel: z.string().min(1),
-  createdAt: z.string(),
+export const CurrentExerciseSchema = ExerciseBaseSchema.extend({
   userTranslation: z.string().optional(),
-  evaluation: EvaluationResultSchema.extend({
-    aiProvider: z.string().min(1),
-    aiModel: z.string().min(1),
+  evaluation: AttributedEvaluationSchema.extend({
+    solvedAt: z.iso.datetime(),
   }).optional(),
 })
 export type CurrentExercise = z.infer<typeof CurrentExerciseSchema>
+
+/**
+ * A solved exercise as stored in Dexie. `solvedAt` is a real `Date` here
+ * (indexable); a JSON import would `.extend` this with `z.coerce.date()`.
+ */
+export const ExerciseRecordSchema = ExerciseBaseSchema.extend({
+  userTranslation: z.string(),
+  evaluation: AttributedEvaluationSchema,
+  solvedAt: z.date(),
+})
+export type ExerciseRecord = z.infer<typeof ExerciseRecordSchema>
 
 export class NoProviderConfiguredError extends Error {
   constructor() {

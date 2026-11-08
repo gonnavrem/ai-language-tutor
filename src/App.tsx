@@ -1,4 +1,5 @@
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { History } from './components/History'
 import { Practice } from './components/Practice'
 import { ProviderSettings } from './components/ProviderSettings'
 
@@ -16,12 +17,16 @@ function App() {
           <NavLink to="/" end className={navLinkClassName}>
             Practice
           </NavLink>
+          <NavLink to="/history" className={navLinkClassName}>
+            History
+          </NavLink>
           <NavLink to="/settings" className={navLinkClassName}>
             Settings
           </NavLink>
         </nav>
         <Routes>
           <Route path="/" element={<Practice />} />
+          <Route path="/history" element={<History />} />
           <Route path="/settings" element={<ProviderSettings />} />
         </Routes>
       </div>

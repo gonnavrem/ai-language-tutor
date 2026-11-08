@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
+import { sampleRecord } from '../../test/fixtures'
 import { db } from './db'
-import { useEvaluationsForExercise, useExercises } from './hooks'
+import { useExercises } from './hooks'
 
 beforeEach(async () => {
-  await db.evaluations.clear()
   await db.exercises.clear()
 })
 
@@ -19,52 +19,22 @@ describe('useExercises', () => {
     const { result } = renderHook(() => useExercises())
     await waitFor(() => expect(result.current).toEqual([]))
 
-    await db.exercises.add({
-      sentence: 'The cat is sleeping.',
-      levelId: 'A1',
-      grammarPoints: ['present continuous'],
-      aiProvider: 'anthropic',
-      aiModel: 'claude-sonnet-5',
-      createdAt: new Date(),
-    })
+    await db.exercises.add(sampleRecord())
 
     await waitFor(() => expect(result.current).toHaveLength(1))
     expect(result.current?.[0].sentence).toBe('The cat is sleeping.')
   })
-})
 
-describe('useEvaluationsForExercise', () => {
-  it('returns an empty array while no exercise id is given', async () => {
-    const { result } = renderHook(() => useEvaluationsForExercise(undefined))
+  it('orders by solvedAt, newest first', async () => {
+    await db.exercises.add(sampleRecord({ sentence: 'Old.' }))
+    await db.exercises.add(
+      sampleRecord({ sentence: 'New.', solvedAt: new Date('2026-02-01') }),
+    )
 
-    await waitFor(() => expect(result.current).toEqual([]))
-  })
+    const { result } = renderHook(() => useExercises())
 
-  it('picks up an evaluation added after the hook has already rendered', async () => {
-    const exerciseId = await db.exercises.add({
-      sentence: 'The cat is sleeping.',
-      levelId: 'A1',
-      grammarPoints: ['present continuous'],
-      aiProvider: 'anthropic',
-      aiModel: 'claude-sonnet-5',
-      createdAt: new Date(),
-    })
-
-    const { result } = renderHook(() => useEvaluationsForExercise(exerciseId))
-    await waitFor(() => expect(result.current).toEqual([]))
-
-    await db.evaluations.add({
-      exerciseId,
-      userTranslation: 'El gato está durmiendo.',
-      scores: { meaning: 10, grammar: 10, naturalness: 9, vocabulary: 10 },
-      issues: [],
-      alternatives: [],
-      aiProvider: 'anthropic',
-      aiModel: 'claude-sonnet-5',
-      createdAt: new Date(),
-    })
-
-    await waitFor(() => expect(result.current).toHaveLength(1))
-    expect(result.current?.[0].userTranslation).toBe('El gato está durmiendo.')
+    await waitFor(() =>
+      expect(result.current?.map((r) => r.sentence)).toEqual(['New.', 'Old.']),
+    )
   })
 })

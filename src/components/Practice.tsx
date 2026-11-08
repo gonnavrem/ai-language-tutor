@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, RefreshCw, Star } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { appConfig, type Level } from '../config'
 import {
@@ -9,14 +9,13 @@ import {
 } from '../lib/ai'
 import {
   NoProviderConfiguredError,
-  computeOverallScore,
   loadCurrentExercise,
   requestExercise,
   saveCurrentExercise,
   submitEvaluation,
   type CurrentExercise,
-  type EvaluationScores,
 } from '../lib/exercise'
+import { EvaluationView } from './EvaluationView'
 
 const levels = appConfig.levelSystem.levels
 
@@ -48,34 +47,6 @@ function describeError(err: unknown): PracticeError {
   }
   console.error(err)
   return { kind: 'other', message: 'Unexpected error — see console.' }
-}
-
-const CATEGORY_LABELS: Record<keyof EvaluationScores, string> = {
-  meaning: 'Meaning',
-  grammar: 'Grammar',
-  naturalness: 'Naturalness',
-  vocabulary: 'Vocabulary',
-}
-
-function CategoryScore({ label, score }: { label: string; score: number }) {
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <span>{label}</span>
-      <span className="flex gap-0.5" aria-label={`${label}: ${score} out of 5`}>
-        {Array.from({ length: 5 }, (_, i) => (
-          <Star
-            key={i}
-            size={14}
-            className={
-              i < score
-                ? 'fill-yellow-400 text-yellow-400'
-                : 'text-gray-300'
-            }
-          />
-        ))}
-      </span>
-    </div>
-  )
 }
 
 export function Practice() {
@@ -220,47 +191,11 @@ export function Practice() {
       )}
 
       {evaluation && (
-        <div className="flex flex-col gap-3 rounded border border-gray-300 p-4">
-          {exercise?.userTranslation && (
-            <p className="text-sm text-gray-500">
-              Your translation: {exercise.userTranslation}
-            </p>
-          )}
-          <div className="flex items-center justify-between">
-            <span className="font-medium">Overall</span>
-            <span className="font-medium">
-              {computeOverallScore(evaluation.scores)} / 5
-            </span>
-          </div>
-          {(Object.keys(CATEGORY_LABELS) as (keyof EvaluationScores)[]).map(
-            (key) => (
-              <CategoryScore
-                key={key}
-                label={CATEGORY_LABELS[key]}
-                score={evaluation.scores[key]}
-              />
-            ),
-          )}
-          {evaluation.issues.length > 0 && (
-            <div>
-              <p className="text-sm font-medium">Issues</p>
-              <ul className="list-disc pl-5 text-sm text-gray-700">
-                {evaluation.issues.map((issue, i) => (
-                  <li key={i}>{issue}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {evaluation.alternatives.length > 0 && (
-            <div>
-              <p className="text-sm font-medium">Alternatives</p>
-              <ul className="list-disc pl-5 text-sm text-gray-700">
-                {evaluation.alternatives.map((alt, i) => (
-                  <li key={i}>{alt}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+        <div className="rounded border border-gray-300 p-4">
+          <EvaluationView
+            evaluation={evaluation}
+            userTranslation={exercise?.userTranslation}
+          />
         </div>
       )}
 

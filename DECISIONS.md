@@ -207,3 +207,169 @@ shaped the source sentence's difficulty during generation
 (`generateExercise.ts`), so re-passing it to evaluation would be a
 level-relative grading curve that CLAUDE.md's scoring criteria don't
 call for.
+
+## M6 — History/review view
+
+**History is read-only: no retrying or re-evaluating a closed exercise.**
+Re-translating a sentence whose solution was already shown loses its pull,
+and a second evaluation would turn exercise→evaluation into a real 1:N
+relation for little value. The intended future way to "re-engage" a closed
+exercise is a _discussion_ with the AI about it — out of scope for M6, and
+nothing here forecloses it.
+
+**`exercises` and `evaluations` are merged into one table; the evaluation is
+embedded in the exercise record.** With retries ruled out, and M4 never
+persisting an unsolved exercise, the relation is 1:1 forever. One table
+means no join in History, no cascade on delete (Dexie has none), a
+single-write flush, and an M7 export that is a plain array with no
+`exerciseId` remapping. Shape: `id, sentence, levelId, grammarPoints,
+aiProvider, aiModel` (who generated the sentence), `userTranslation`,
+`evaluation: { scores, issues, alternatives, aiProvider, aiModel }`,
+`solvedAt`; indexes on `levelId` and `solvedAt`. Cost: M2's schema, hooks
+and tests are rewritten, and a future need for several evaluations per
+exercise would mean splitting again — accepted, since retries were
+rejected. Done as a clean rewrite of `version(1)` (including
+`secureConfig`), **not** a `version(3)` migration, because dev data is
+disposable. Rule from here: the first time data matters, versions become
+append-only. One-time dev cost: delete the `language-tutor` IndexedDB in
+DevTools (Application → IndexedDB), which also wipes `secureConfig`, so the
+API key must be re-entered in Settings.
+
+**There is exactly one date: `solvedAt` — when the evaluation arrived, i.e.
+when the user practiced it.** It replaces both `exercises.createdAt`
+(generation time, now dropped) and `evaluations.createdAt`, which was a bug:
+it was stamped at flush time, so an exercise solved today and moved past
+tomorrow was dated tomorrow. `submitEvaluation` captures it and it travels
+inside `CurrentExercise.evaluation` (set together with it, so `evaluation`
+stays the single "solved" marker) until the flush hoists it to the record's
+top level. History sorts and displays by it. Using the generation time
+instead would be zero-change and sort identically (exercises are solved one
+at a time), but would show the wrong day whenever a draft is left overnight
+— which M5's persistent draft explicitly allows.
+
+**The overall score is recomputed from the four category scores on render,
+not stored.** Dexie can't index a derived value, so sorting/filtering by it
+would happen in JS — but History already loads every row, and
+`computeOverallScore` is arithmetic on four numbers, so the cost is
+negligible. M6 only sorts by date and filters by level anyway. The category
+scores are the source of truth; changing the weights or the meaning-cap
+intentionally re-scores history rather than leaving it frozen, and it avoids
+a derived field to keep in sync (and to export). If a frozen history is ever
+wanted, adding the field then is a trivial change.
+
+**The exercise currently on screen is not listed in History until the user
+moves past it (M4's rule, kept), with a one-line hint in the UI.** Merging it
+in from localStorage was rejected: it would be a "virtual" row with no Dexie
+`id`; a `requestExercise` still in flight when the user opens History flushes
+into Dexie while the row read from localStorage at mount is still shown
+(duplicate); localStorage isn't reactive; and the row would be thrown away
+once discussion lands. **Revisit when the discussion feature is designed:**
+it needs a Dexie `id` for the just-solved exercise, so the likely move is to
+persist at evaluation time instead of on supersession (reversing M4's flush
+timing) — which would also fix "History link → exercise still on the
+practice screen" by making Dexie the single source. Deliberately not decided
+now: the design depends on product questions (chat shape, context, token
+cost) that would be speculation today, and persisting earlier is just
+moving one write, so deferring costs nothing.
+
+**History is a third nav tab (`/history`) with expandable rows, not a
+`/history/:id` route.** Less navigation for a mobile MVP. Row state (key and
+expanded flag) is keyed by record `id`, never by index, so adding a detail
+route later is trivial; real navigation will be needed once exercises become
+re-enterable. Collapsed row: source sentence, level, overall score, date.
+Expanded: the user's translation, the four category scores, issues,
+alternatives, and — newly visible — the grammar points (hidden during
+practice to avoid biasing the attempt; there is no bias left once solved),
+with provider/model as secondary info.
+
+**The evaluation block is extracted from `Practice.tsx` into a shared
+`EvaluationView` (with `CategoryScore`), taking plain data props.** Both
+`CurrentExercise.evaluation` and the stored record have the same shape and
+both use `computeOverallScore`, so History and Practice share it without
+coupling.
+
+**Scope is deliberately minimal: newest first, a level filter, delete one,
+delete all.** Out of scope: score filter, text search, pagination (local data
+of a few hundred rows), and any stats/progress view — premium features, to be
+built only once the basics work. Deletion is one `delete` per record (no
+cascade needed after the merge). Both "delete" and "delete all" use an inline
+two-step confirmation (rather than `window.confirm`, which is unreliable in
+Capacitor): the single-delete button sits inside the expanded detail, right
+below content being read, and there is no undo, so a stray tap shouldn't be
+enough. The collapsed row hides the overall score while expanded, since the
+detail already shows it — this avoids duplicating it without touching the
+shared `EvaluationView`.
+"Delete all" clears Dexie only, not the localStorage current exercise, so a
+solved current exercise can still appear later when flushed — accepted.
+
+**An unknown `levelId` (the level config changed) is shown as the raw id with
+a discreet "no longer in config" marker, not coerced to `levels[0]` as
+`Practice` does.** Only the id is stored, with no label snapshot: it would
+duplicate config data, go stale if a label is reworded, and bloat the M7
+export; the id alone is enough to render. The level filter's options are the
+config levels plus any orphan ids present in the data.
+
+**Export/import is its own milestone (M7), inserted before packaging.** The
+APK's WebView and the PWA keep separate IndexedDB stores, so export/import is
+the only way to carry history between installs — hence before M8/M9. It has
+its own decisions to settle there: a versioned, Zod-validated format; API
+keys excluded (the ciphertext is device-bound anyway); merge vs. replace on
+import; file mechanics on web (download) vs. Capacitor (Filesystem/Share).
+The single-table merge keeps the format a plain array.
+
+### M6 review fixes
+
+**Exercise ids are UUIDs assigned when the exercise is created
+(`crypto.randomUUID()`), not Dexie auto-increment; records are written with
+`put`.** The id travels with `CurrentExercise` in localStorage, so persisting
+the same exercise twice overwrites its own row instead of duplicating it. It
+also gives M7 stable cross-device ids: import becomes a plain `put` per
+record, so re-importing a file or merging two devices can't duplicate rows —
+with per-database auto-increment ids, a backup's ids would either collide with
+unrelated local rows or have to be dropped, making every re-import a
+duplicate. Done now because Dexie can't change a primary key in a normal
+version upgrade (it needs a new table and a copy); dev data is disposable, so
+`version(1)` is rewritten again (delete the `language-tutor` IndexedDB once).
+Accepted risk: on a UUID v4 collision (122 random bits from the browser's
+CSPRNG — practically impossible) one exercise would be silently overwritten;
+deliberately not mitigated, since a check would cost a read per write for a
+branch that never runs. `randomUUID` needs a secure context, which every
+target (localhost dev, HTTPS PWA, Capacitor's `https://localhost`) is.
+
+**The solved exercise is flushed to Dexie _before_ generating its
+replacement, and is no longer discarded as part of the flush.** Previously
+the flush ran after generation, so a failing Dexie write (quota, private
+mode) threw away a sentence that had already cost an API call — and, since
+the outgoing exercise was never discarded, every retry repeated it: the user
+was stuck and paying per attempt. The prefetch buffer didn't help, because it
+was consumed before the flush. Now a failed write costs nothing (no
+generation call, buffer untouched), and if generation fails after a
+successful write the exercise stays on screen (M4's "commit only once the
+replacement arrives" still holds); the retried write is a no-op thanks to the
+UUID + `put` above. The outgoing exercise is replaced by simply saving the new
+one over it in localStorage.
+
+**The stored record type is derived from the Zod schemas, not written by
+hand.** `ExerciseRecordSchema` and `CurrentExerciseSchema` both extend one
+`ExerciseBaseSchema` and share the AI's `EvaluationResultSchema` (plus
+provider/model), all in `lib/exercise/types.ts`; `db.ts` only re-exports the
+inferred type. The hand-written copy could drift silently: a field added to
+the AI schema would be stored (the flush passes a variable, which skips TS's
+excess-property check) yet be invisible to the record type. The one place the
+shapes legitimately differ is `solvedAt`: an ISO string in localStorage and
+JSON, a `Date` in Dexie (indexable) — M7's import schema `.extend`s the
+record with `z.coerce.date()`. Trade-off: the stored format is coupled to the
+AI's output format; if export ever needs to stay stable while the prompt
+evolves, M7's versioned format is where they would be split.
+
+**All Dexie writes go through `lib/db/exercises.ts` (`saveExercise`,
+`deleteExercise`, `deleteExercises`); components don't call `db.*` for
+writes.** Keeps persistence in one place for M7 and any future cascade (e.g.
+discussion threads keyed by exercise id).
+
+**"Delete all" is scoped to the active level filter, and delete failures are
+shown inline.** With a filter set, the button reads "Delete all at this
+level" and the prompt names the count and level being removed; deleting rows
+the user can't see, with no undo, was the bug. Both delete actions catch
+errors, log them, and show "Couldn't delete — see console." while keeping the
+confirmation open, instead of an unhandled rejection with no feedback.

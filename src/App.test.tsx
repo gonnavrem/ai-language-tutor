@@ -20,6 +20,14 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
+  it('navigates to history', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('link', { name: /history/i }))
+
+    expect(screen.getByRole('heading', { name: 'History' })).toBeInTheDocument()
+  })
+
   it('navigates to provider settings', () => {
     render(<App />)
 

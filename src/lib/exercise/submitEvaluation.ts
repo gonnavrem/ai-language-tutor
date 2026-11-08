@@ -40,6 +40,7 @@ export async function submitEvaluation(
       ...result,
       aiProvider: config.providerId,
       aiModel: config.model,
+      solvedAt: new Date().toISOString(),
     },
   }
   saveCurrentExercise(next)

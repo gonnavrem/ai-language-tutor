@@ -62,12 +62,12 @@ describe('Practice', () => {
 
   it('shows an already-pending exercise without generating a new one', async () => {
     saveCurrentExercise({
+      id: crypto.randomUUID(),
       sentence: 'The cat sleeps.',
       levelId: appConfig.levelSystem.levels[0].id,
       grammarPoints: ['present simple'],
       aiProvider: 'anthropic',
       aiModel: 'claude-test',
-      createdAt: new Date().toISOString(),
     })
 
     renderPractice()
@@ -146,12 +146,12 @@ describe('Practice', () => {
 
   it('never shows the grammar points being tested', async () => {
     saveCurrentExercise({
+      id: crypto.randomUUID(),
       sentence: 'The cat sleeps.',
       levelId: appConfig.levelSystem.levels[0].id,
       grammarPoints: ['present simple', 'secret grammar point'],
       aiProvider: 'anthropic',
       aiModel: 'claude-test',
-      createdAt: new Date().toISOString(),
     })
 
     renderPractice()
@@ -166,12 +166,12 @@ describe('Practice', () => {
       model: 'claude-test',
     })
     saveCurrentExercise({
+      id: crypto.randomUUID(),
       sentence: 'The cat sleeps.',
       levelId: appConfig.levelSystem.levels[0].id,
       grammarPoints: ['present simple'],
       aiProvider: 'anthropic',
       aiModel: 'claude-test',
-      createdAt: new Date().toISOString(),
     })
     fetchMock.mockResolvedValueOnce(
       anthropicTextResponse({
@@ -191,9 +191,7 @@ describe('Practice', () => {
 
     expect(await screen.findByText('4.5 / 5')).toBeInTheDocument()
     expect(screen.getByText('Minor article error.')).toBeInTheDocument()
-    expect(
-      screen.queryByLabelText(/your translation/i),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/your translation/i)).not.toBeInTheDocument()
   })
 
   it('keeps the typed translation after a failed submit and allows retrying', async () => {
@@ -203,12 +201,12 @@ describe('Practice', () => {
       model: 'claude-test',
     })
     saveCurrentExercise({
+      id: crypto.randomUUID(),
       sentence: 'The cat sleeps.',
       levelId: appConfig.levelSystem.levels[0].id,
       grammarPoints: ['present simple'],
       aiProvider: 'anthropic',
       aiModel: 'claude-test',
-      createdAt: new Date().toISOString(),
     })
     fetchMock.mockResolvedValueOnce(anthropicTextResponse({}, 500))
 
@@ -244,12 +242,12 @@ describe('Practice', () => {
       model: 'claude-test',
     })
     saveCurrentExercise({
+      id: crypto.randomUUID(),
       sentence: 'The cat sleeps.',
       levelId: appConfig.levelSystem.levels[0].id,
       grammarPoints: ['present simple'],
       aiProvider: 'anthropic',
       aiModel: 'claude-test',
-      createdAt: new Date().toISOString(),
     })
     let resolveFetch: (value: Response) => void = () => {}
     fetchMock.mockReturnValueOnce(
@@ -266,7 +264,9 @@ describe('Practice', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /submit translation/i }))
 
-    expect(await screen.findByRole('button', { name: /new sentence/i })).toBeDisabled()
+    expect(
+      await screen.findByRole('button', { name: /new sentence/i }),
+    ).toBeDisabled()
     expect(screen.getByLabelText(/level/i)).toBeDisabled()
 
     resolveFetch(

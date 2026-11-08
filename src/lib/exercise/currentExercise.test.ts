@@ -7,12 +7,12 @@ import {
 import type { CurrentExercise } from './types'
 
 const sample: CurrentExercise = {
+  id: crypto.randomUUID(),
   sentence: 'The cat is sleeping.',
   levelId: 'A1',
   grammarPoints: ['present continuous'],
   aiProvider: 'anthropic',
   aiModel: 'claude-sonnet-5',
-  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
 beforeEach(() => {

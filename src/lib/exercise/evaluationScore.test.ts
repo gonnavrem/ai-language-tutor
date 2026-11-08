@@ -19,7 +19,11 @@ describe('computeOverallScore', () => {
 
   it('applies the weighted formula when no cap is triggered', () => {
     // 4*0.4 + 4*0.25 + 4*0.2 + 4*0.15 = 4
-    expect(computeOverallScore(scores({ meaning: 4, grammar: 4, naturalness: 4, vocabulary: 4 }))).toBe(4)
+    expect(
+      computeOverallScore(
+        scores({ meaning: 4, grammar: 4, naturalness: 4, vocabulary: 4 }),
+      ),
+    ).toBe(4)
   })
 
   it('caps the overall score at meaning + 0.5 when meaning is low', () => {

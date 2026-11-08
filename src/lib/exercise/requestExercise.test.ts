@@ -20,6 +20,15 @@ function sentenceResult(sentence: string) {
   return { sentence, grammarPoints: ['present simple'] }
 }
 
+const solvedEvaluation = {
+  scores: { meaning: 5, grammar: 4, naturalness: 5, vocabulary: 5 },
+  issues: [],
+  alternatives: [],
+  aiProvider: 'anthropic',
+  aiModel: 'claude-test',
+  solvedAt: '2026-01-01T10:00:00.000Z',
+}
+
 // requestExercise keeps its one-slot prefetch buffer as module state, so
 // each test reloads the module fresh — otherwise a buffer left behind by
 // one test's `it` block would silently answer the next test's first call.
@@ -29,7 +38,6 @@ beforeEach(async () => {
   localStorage.clear()
   await db.secureConfig.clear()
   await db.exercises.clear()
-  await db.evaluations.clear()
   generateStructured.mockReset()
   await secureStorage.setProviderConfig({
     providerId: 'anthropic',
@@ -81,10 +89,9 @@ describe('requestExercise', () => {
     await requestExercise(levelB)
 
     expect(await db.exercises.count()).toBe(0)
-    expect(await db.evaluations.count()).toBe(0)
   })
 
-  it('flushes an evaluated exercise to exercises + evaluations before replacing it', async () => {
+  it('flushes an evaluated exercise as one record before replacing it', async () => {
     generateStructured.mockResolvedValue(sentenceResult('First.'))
     const first = await requestExercise(levelA)
     saveCurrentExercise({
@@ -96,6 +103,7 @@ describe('requestExercise', () => {
         alternatives: [],
         aiProvider: 'anthropic',
         aiModel: 'claude-test',
+        solvedAt: '2026-01-01T10:00:00.000Z',
       },
     })
 
@@ -104,15 +112,62 @@ describe('requestExercise', () => {
 
     const exercises = await db.exercises.toArray()
     expect(exercises).toHaveLength(1)
-    expect(exercises[0].sentence).toBe('First.')
+    expect(exercises[0]).toMatchObject({
+      sentence: 'First.',
+      userTranslation: 'Primero.',
+      evaluation: { scores: { grammar: 4 }, aiModel: 'claude-test' },
+      solvedAt: new Date('2026-01-01T10:00:00.000Z'),
+    })
+    expect(exercises[0].evaluation).not.toHaveProperty('solvedAt')
+  })
 
-    const evaluations = await db.evaluations
-      .where('exerciseId')
-      .equals(exercises[0].id)
-      .toArray()
-    expect(evaluations).toHaveLength(1)
-    expect(evaluations[0].userTranslation).toBe('Primero.')
-    expect(evaluations[0].scores.grammar).toBe(4)
+  it('gives each new exercise its own UUID', async () => {
+    generateStructured.mockResolvedValue(sentenceResult('Same.'))
+
+    const first = await requestExercise(levelA)
+    const second = await requestExercise(levelA)
+
+    expect(first.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(second.id).not.toBe(first.id)
+  })
+
+  it('does not spend a generation call when persisting the solved exercise fails', async () => {
+    generateStructured.mockResolvedValue(sentenceResult('First.'))
+    const first = await requestExercise(levelA)
+    const solved = { ...first, evaluation: solvedEvaluation }
+    saveCurrentExercise(solved)
+    const callsBefore = generateStructured.mock.calls.length
+
+    // The module reset in beforeEach gives requestExercise its own `db`
+    // instance, so the spy must target that one.
+    const { db: moduleDb } = await import('../db/db')
+    const put = vi
+      .spyOn(moduleDb.exercises, 'put')
+      .mockRejectedValueOnce(new Error('quota'))
+    await expect(requestExercise(levelB)).rejects.toThrow('quota')
+    put.mockRestore()
+
+    expect(generateStructured).toHaveBeenCalledTimes(callsBefore)
+    expect(loadCurrentExercise()).toEqual(solved)
+  })
+
+  it('keeps the solved exercise on screen if generation fails after persisting it, without duplicating it on retry', async () => {
+    generateStructured.mockResolvedValue(sentenceResult('First.'))
+    const first = await requestExercise(levelA)
+    const solved = { ...first, evaluation: solvedEvaluation }
+    saveCurrentExercise(solved)
+
+    generateStructured.mockRejectedValue(new Error('boom'))
+    await expect(requestExercise(levelB)).rejects.toThrow('boom')
+    expect(loadCurrentExercise()).toEqual(solved)
+    expect(await db.exercises.count()).toBe(1)
+
+    generateStructured.mockResolvedValue(sentenceResult('Second.'))
+    await requestExercise(levelB)
+
+    const stored = await db.exercises.toArray()
+    expect(stored).toHaveLength(1)
+    expect(stored[0].id).toBe(first.id)
   })
 
   it('leaves the current exercise untouched when generation fails', async () => {

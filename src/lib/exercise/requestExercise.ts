@@ -1,12 +1,8 @@
 import type { Level } from '../../config'
 import { createProvider, type AIProvider } from '../ai'
 import { secureStorage } from '../secureStorage'
-import { db } from '../db/db'
-import {
-  discardCurrentExercise,
-  loadCurrentExercise,
-  saveCurrentExercise,
-} from './currentExercise'
+import { saveExercise } from '../db/exercises'
+import { loadCurrentExercise, saveCurrentExercise } from './currentExercise'
 import { generateExerciseSentence } from './generateExercise'
 import {
   NoProviderConfiguredError,
@@ -39,44 +35,39 @@ function fillPrefetchBuffer(
 }
 
 /**
- * The outgoing exercise is persisted to Dexie only if it was solved
- * (`evaluation` is set) — an unevaluated exercise has no evaluative value
- * and is simply discarded, per DECISIONS.md M4/M5.
+ * Persists the outgoing exercise to Dexie if it was solved (`evaluation` is
+ * set) — an unevaluated one has no evaluative value and is simply replaced,
+ * per DECISIONS.md M4/M5. Runs *before* generation and does not discard:
+ * if the write fails, nothing has been spent or lost; if generation fails
+ * after it, the exercise stays on screen and the retried write is a no-op
+ * overwrite of its own row (see DECISIONS.md M6, "flush before generating").
  */
-async function flushOrDiscardCurrentExercise(): Promise<void> {
-  const outgoing = loadCurrentExercise()
-  const evaluation = outgoing?.evaluation
+async function persistIfSolved(
+  outgoing: CurrentExercise | null,
+): Promise<void> {
+  if (!outgoing?.evaluation) return
 
-  if (outgoing && evaluation) {
-    await db.transaction('rw', db.exercises, db.evaluations, async () => {
-      const exerciseId = await db.exercises.add({
-        sentence: outgoing.sentence,
-        levelId: outgoing.levelId,
-        grammarPoints: outgoing.grammarPoints,
-        aiProvider: outgoing.aiProvider,
-        aiModel: outgoing.aiModel,
-        createdAt: new Date(outgoing.createdAt),
-      })
-      await db.evaluations.add({
-        exerciseId,
-        userTranslation: outgoing.userTranslation ?? '',
-        scores: evaluation.scores,
-        issues: evaluation.issues,
-        alternatives: evaluation.alternatives,
-        aiProvider: evaluation.aiProvider,
-        aiModel: evaluation.aiModel,
-        createdAt: new Date(),
-      })
-    })
-  }
-
-  discardCurrentExercise()
+  const { solvedAt, ...evaluation } = outgoing.evaluation
+  await saveExercise({
+    id: outgoing.id,
+    sentence: outgoing.sentence,
+    levelId: outgoing.levelId,
+    grammarPoints: outgoing.grammarPoints,
+    aiProvider: outgoing.aiProvider,
+    aiModel: outgoing.aiModel,
+    userTranslation: outgoing.userTranslation ?? '',
+    evaluation,
+    solvedAt: new Date(solvedAt),
+  })
 }
 
 async function requestExerciseInternal(level: Level): Promise<CurrentExercise> {
   const config = await secureStorage.getProviderConfig()
   if (!config) throw new NoProviderConfiguredError()
   const provider = createProvider(config)
+
+  // Before touching the prefetch buffer, so a failed write leaves it intact.
+  await persistIfSolved(loadCurrentExercise())
 
   const buffered = prefetchBuffer?.levelId === level.id ? prefetchBuffer : null
   prefetchBuffer = null
@@ -100,15 +91,14 @@ async function requestExerciseInternal(level: Level): Promise<CurrentExercise> {
     model = config.model
   }
 
-  await flushOrDiscardCurrentExercise()
-
+  // Saving the replacement overwrites the outgoing exercise in localStorage.
   const next: CurrentExercise = {
+    id: crypto.randomUUID(),
     sentence: sentence.sentence,
     levelId: level.id,
     grammarPoints: sentence.grammarPoints,
     aiProvider: providerId,
     aiModel: model,
-    createdAt: new Date().toISOString(),
   }
   saveCurrentExercise(next)
 
