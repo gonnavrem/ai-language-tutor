@@ -7,6 +7,7 @@ See `DECISIONS.md` for the reasoning behind non-obvious architectural choices. A
 ## Commands
 
 - `npm run dev` — start the Vite dev server
+- `npm run dev:mock` — dev server on port 5174 with canned AI responses and a pre-populated history (no API key, no requests spent); separate origin from `dev`, see `DECISIONS.md` "Dev mock mode"
 - `npm run build` — type-check (`tsc -b`) then production build
 - `npm run test` — run the Vitest suite once
 - `npm run test:watch` — Vitest in watch mode

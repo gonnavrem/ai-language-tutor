@@ -373,3 +373,47 @@ level" and the prompt names the count and level being removed; deleting rows
 the user can't see, with no undo, was the bug. Both delete actions catch
 errors, log them, and show "Couldn't delete — see console." while keeping the
 confirmation open, instead of an unhandled rejection with no feedback.
+
+## Dev mock mode
+
+**`npm run dev:mock` is an opt-in Vite mode on its own port (5174,
+`--strictPort`), not a default behaviour of `npm run dev`.** Canned AI
+responses plus a pre-populated history let the app be exercised without an
+API key or spending requests — but `dev` must stay able to hit the real API,
+because prompt changes can only be judged against a real model. The separate
+port is load-bearing, not cosmetic: a different port is a different origin,
+hence a separate IndexedDB and localStorage. Sharing `localhost:5173` would
+make mock mode overwrite the real API-key config and mix sample rows into the
+real dev history. `--strictPort` stops Vite silently falling back to 5173
+when 5174 is busy. The tab title gets a `[MOCK]` prefix.
+
+**The mock plugs in at `createProvider` and via a placeholder provider
+config, so `requestExercise` / `submitEvaluation` are untouched.** Those read
+the stored config before creating a provider and throw
+`NoProviderConfiguredError` without one; rather than teach them about mock
+mode, startup stores a throwaway config (`apiKey: 'mock'`, `model: 'mock'`)
+and `createProvider` ignores it and returns a `MockProvider`. That is the
+only production-code branch (one line). Records produced in mock mode carry
+model `mock`, which is what tells them apart from real ones. `'mock'` is
+deliberately **not** added to `ProviderIdSchema`: that enum is persisted,
+shown in Settings and will be exported by M7, so dev tooling must not leak
+into it.
+
+**The history is seeded automatically at startup, only when the table is
+empty.** No button or UI. The consequence is deliberate: restarting the mock
+server resets an emptied history, and never duplicates a populated one. The
+sample rows are deterministic and cover every level, the full range of
+scores, and one level id absent from the config (to show the "no longer in
+config" marker). Canned evaluations are prefixed "(mock)" so they can't be
+mistaken for real feedback.
+
+**Production builds must contain none of it, and that is verified, not
+assumed.** The mode flag is a compile-time constant (`DEV && MODE ===
+'mock'`). `main.tsx` imports the setup module **statically**, not with
+`import()`: the bundler (Vite 8) keeps a dynamic import even inside a dead
+branch — it emitted a `setup` chunk and left the sample data in the main
+bundle — whereas an unused static import is tree-shaken away. Check after
+touching this: build, then search `dist/` for `(mock)`; bundle size should be
+unchanged. The mock reads the level from the prompt wording in
+`generateExercise.ts`; `mockProvider.test.ts` runs the real generator against
+it so drift fails loudly instead of silently serving the wrong level.
