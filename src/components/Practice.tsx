@@ -101,6 +101,10 @@ export function Practice() {
   }
 
   useEffect(() => {
+    // Re-armed on every mount, not just initialised to true: StrictMode's
+    // dev-only mount → cleanup → mount would otherwise leave this false for
+    // good, silently dropping every post-await state update.
+    isMounted.current = true
     return () => {
       isMounted.current = false
       if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current)

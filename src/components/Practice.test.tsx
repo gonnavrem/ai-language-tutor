@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -49,6 +50,56 @@ function renderPractice() {
     </MemoryRouter>,
   )
 }
+
+describe('Practice under StrictMode', () => {
+  // StrictMode (on in main.tsx) mounts, unmounts and remounts every component
+  // in dev. Regression: an `isMounted` ref only ever set to false in cleanup
+  // stayed false afterwards, so responses were saved but never rendered until
+  // the component was remounted by navigating away and back.
+  it('renders the generated sentence and the evaluation without a remount', async () => {
+    await secureStorage.setProviderConfig({
+      providerId: 'anthropic',
+      apiKey: 'sk-test',
+      model: 'claude-test',
+    })
+    fetchMock.mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String(init?.body))
+      const isEvaluation = JSON.stringify(body).includes(
+        'translation_evaluation',
+      )
+      return anthropicTextResponse(
+        isEvaluation
+          ? {
+              scores: { meaning: 5, grammar: 5, naturalness: 5, vocabulary: 5 },
+              issues: [],
+              alternatives: [],
+            }
+          : {
+              sentence: 'She walks to work.',
+              grammarPoints: ['present simple'],
+            },
+      )
+    })
+
+    render(
+      <StrictMode>
+        <MemoryRouter>
+          <Practice />
+        </MemoryRouter>
+      </StrictMode>,
+    )
+
+    expect(await screen.findByText('She walks to work.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/your translation/i), {
+      target: { value: 'Ella camina al trabajo.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /submit translation/i }))
+
+    expect(await screen.findByText('Overall')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /new sentence/i })).toBeEnabled()
+  })
+})
 
 describe('Practice', () => {
   it('prompts to configure a provider when none is saved', async () => {
