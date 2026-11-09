@@ -2,7 +2,11 @@ import type { Level } from '../../config'
 import { createProvider, type AIProvider } from '../ai'
 import { secureStorage } from '../secureStorage'
 import { saveExercise } from '../db/exercises'
-import { loadCurrentExercise, saveCurrentExercise } from './currentExercise'
+import {
+  loadCurrentExercise,
+  saveCurrentExercise,
+  toExerciseRecord,
+} from './currentExercise'
 import { generateExerciseSentence } from './generateExercise'
 import {
   NoProviderConfiguredError,
@@ -45,20 +49,8 @@ function fillPrefetchBuffer(
 async function persistIfSolved(
   outgoing: CurrentExercise | null,
 ): Promise<void> {
-  if (!outgoing?.evaluation) return
-
-  const { solvedAt, ...evaluation } = outgoing.evaluation
-  await saveExercise({
-    id: outgoing.id,
-    sentence: outgoing.sentence,
-    levelId: outgoing.levelId,
-    grammarPoints: outgoing.grammarPoints,
-    aiProvider: outgoing.aiProvider,
-    aiModel: outgoing.aiModel,
-    userTranslation: outgoing.userTranslation ?? '',
-    evaluation,
-    solvedAt: new Date(solvedAt),
-  })
+  const record = outgoing && toExerciseRecord(outgoing)
+  if (record) await saveExercise(record)
 }
 
 async function requestExerciseInternal(level: Level): Promise<CurrentExercise> {

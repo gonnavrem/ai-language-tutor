@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { sampleRecord } from '../../test/fixtures'
 import { db } from './db'
-import { deleteExercise, deleteExercises, saveExercise } from './exercises'
+import {
+  addMissingExercises,
+  deleteExercise,
+  deleteExercises,
+  saveExercise,
+} from './exercises'
 
 beforeEach(async () => {
   await db.exercises.clear()
@@ -15,6 +20,21 @@ describe('exercise helpers', () => {
     await saveExercise(record)
 
     expect(await db.exercises.count()).toBe(1)
+  })
+
+  it('import merge adds only missing ids; the local row wins', async () => {
+    const local = sampleRecord({ userTranslation: 'Local.' })
+    await saveExercise(local)
+    const incoming = sampleRecord()
+
+    const added = await addMissingExercises([
+      { ...local, userTranslation: 'From backup.' },
+      incoming,
+    ])
+
+    expect(added).toBe(1)
+    expect(await db.exercises.get(local.id)).toEqual(local)
+    expect(await db.exercises.get(incoming.id)).toEqual(incoming)
   })
 
   it('deletes a single exercise by id', async () => {

@@ -1,0 +1,58 @@
+{
+  "format": "ai-language-tutor/history",
+  "version": 1,
+  "exportedAt": "2026-11-08T10:00:00.000Z",
+  "languagePair": {
+    "source": "en",
+    "target": "es"
+  },
+  "levelSystemId": "cefr",
+  "exercises": [
+    {
+      "id": "2f1c7a52-3b8e-4d1a-9c6f-0e5b8a7d4c21",
+      "sentence": "The cat is sleeping on the sofa.",
+      "levelId": "A1",
+      "grammarPoints": ["present continuous"],
+      "aiProvider": "anthropic",
+      "aiModel": "claude-haiku-4-5",
+      "userTranslation": "El gato está durmiendo en el sofá.",
+      "evaluation": {
+        "scores": {
+          "meaning": 5,
+          "grammar": 5,
+          "naturalness": 5,
+          "vocabulary": 5
+        },
+        "issues": [],
+        "alternatives": [],
+        "aiProvider": "anthropic",
+        "aiModel": "claude-haiku-4-5"
+      },
+      "solvedAt": "2026-11-01T09:30:00.000Z"
+    },
+    {
+      "id": "9a4e6b10-7c2d-4f3e-8b5a-1d6c9e2f7a03",
+      "sentence": "She had already left when I arrived.",
+      "levelId": "B1",
+      "grammarPoints": ["past perfect", "when-clauses"],
+      "aiProvider": "google",
+      "aiModel": "gemini-2.5-flash",
+      "userTranslation": "Ella ya se fue cuando llegué.",
+      "evaluation": {
+        "scores": {
+          "meaning": 4,
+          "grammar": 3,
+          "naturalness": 4,
+          "vocabulary": 5
+        },
+        "issues": [
+          "\"Se fue\" loses the anteriority; the pluperfect \"se había ido\" is needed."
+        ],
+        "alternatives": ["Ella ya se había ido cuando llegué."],
+        "aiProvider": "google",
+        "aiModel": "gemini-2.5-flash"
+      },
+      "solvedAt": "2026-11-03T18:05:00.000Z"
+    }
+  ]
+}

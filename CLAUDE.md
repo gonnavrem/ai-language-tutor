@@ -57,6 +57,6 @@ Dexie + `dexie-react-hooks` (`liveQuery`) only — no Redux/Zustand/TanStack Que
 - [x] M4 — Exercise generation flow
 - [x] M5 — Translation evaluation flow
 - [x] M6 — History/review view
-- [ ] M7 — Data export/import (versioned, Zod-validated JSON; excludes API keys)
-- [ ] M8 — Mobile packaging (Capacitor Android → APK)
+- [x] M7 — Data export/import (versioned, Zod-validated JSON; excludes API keys)
+- [ ] M8 — Mobile packaging (Capacitor Android → APK; incl. native backup export via `@capacitor/filesystem` + `@capacitor/share` — `saveTextFile` currently throws on native, see `DECISIONS.md` M7)
 - [ ] M9 — PWA packaging

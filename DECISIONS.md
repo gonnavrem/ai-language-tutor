@@ -417,3 +417,119 @@ touching this: build, then search `dist/` for `(mock)`; bundle size should be
 unchanged. The mock reads the level from the prompt wording in
 `generateExercise.ts`; `mockProvider.test.ts` runs the real generator against
 it so drift fails loudly instead of silently serving the wrong level.
+
+## M7 — Data export/import
+
+**The export format is defined on its own and frozen per version, not
+derived from `ExerciseRecordSchema`.** A backup file outlives the code that
+wrote it. If "v1" were `ExerciseRecordSchema.extend(...)`, any later change to
+the AI's output schema would silently redefine v1 and break old backups. So
+each format version is written out explicitly (`lib/backup/`). A type-level
+test keeps `ExerciseRecord` and the current format version mutually
+assignable: when they diverge, the compiler forces a choice between bumping
+the version and writing a mapping. A committed v1 fixture file is a golden
+test that every future version must still import. Rule from here: **any field
+added to `ExerciseRecord` must be optional or have a derivable default.**
+Otherwise an older backup can't be migrated forward, because there is nowhere
+to get the value from. Backward compatibility is best-effort in that sense:
+old files always import, but they only carry what they had.
+
+**Envelope: `{ format: 'ai-language-tutor/history', version, exportedAt,
+languagePair: { source, target }, levelSystemId, exercises }`.** `format`
+rejects foreign JSON with a clear message. `version` is a plain integer of its
+own, independent of the Dexie schema version and the app version. Import
+accepts `version ≤ current` and migrates step by step (v1→v2→…). It rejects a
+newer version with "exported by a newer version of the app". With only v1
+today this is a `switch`, not migration infrastructure. The real stable
+contract is this format, not the IndexedDB schema: Dexie can keep being
+rewritten in place until real data exists (M8), as long as the importer
+works.
+
+**A different language pair is a hard reject; a different level system is
+not.** Sentences and translations from another template instance are
+meaningless here. Unknown `levelId`s already render as orphans (M6), so
+`levelSystemId` is informational only. The pair lives in the version-agnostic
+header (with `format` and `version`) and is checked before the deep parse,
+so another instance's file whose exercise shape has drifted still gets the
+"wrong pair" message, not a field error. Cost: every future format version
+must keep `languagePair` at the top level.
+
+**Import is merge-only, and local rows win on id collision (insert only
+missing ids, not `put`).** UUIDs make merging trivial, and records are
+immutable (History is read-only), so the same id is the same exercise.
+"Local wins" protects against a backup from an older format version, migrated
+forward with fewer fields, overwriting a richer local row. It also gives the
+"N new, M already present" summary for free. There is no replace mode:
+"Delete all" followed by import already does that. Accepted consequence:
+there are no tombstones, so an exercise deleted locally comes back if a
+backup containing it is re-imported. For a personal backup, that is what
+restoring means.
+
+**Validation is all-or-nothing, but never opaque.** The whole file is
+validated before anything is written, then inserted in one Dexie
+transaction. A file that fails is rejected entirely, since files are
+machine-written and a corrupt one signals something wrong. Partial imports
+would hide that. To keep this from being frustrating, import is two-step,
+like M6's deletes. Picking a file only validates it. A valid file shows a
+summary (count, language pair, export date, new vs. already present) plus an
+Import button. An invalid one shows a human-readable reason in the same spot:
+not JSON; not a Language Tutor backup; newer version; wrong language pair;
+duplicate id inside the file; or "exercise #17 (_"She had already left…"_):
+missing `evaluation.scores.grammar`" plus "…and N more". The full Zod error
+goes to the console.
+
+**`solvedAt` is parsed with `z.iso.datetime()` + a transform to `Date`, not
+`z.coerce.date()` (correcting the M6 note).** Coerce runs `new Date(x)` on
+anything: `null` becomes 1970, `"2020"` becomes Jan 1 2020, and locale-style
+strings parse ambiguously. A garbage value would turn into a valid but false
+date with no error. The file is always written by this app, so strict ISO
+costs a legitimate user nothing. It must be a real `Date` in Dexie: Dexie
+orders all Dates before all strings, so a string `solvedAt` would break
+History's sort.
+
+**The export includes the current exercise if it is solved.** By M4's flush
+rule, a solved exercise still on screen isn't in Dexie yet, so "practice on
+the phone, then export" would lose exactly the latest one. It carries its
+UUID, so the later flush on the source device can't duplicate it. Import
+leaves localStorage untouched. Accepted edge: importing a backup on the same
+device can make the on-screen exercise appear in History early (bending
+M6's hint). It is still never duplicated, because of "local wins". API keys
+and the non-secret provider settings are excluded; the latter live inside
+the encrypted blob and are settings, not data.
+
+**File mechanics sit behind a platform switch, like `secureStorage`. M7
+ships the web path; the native path is an explicit M8 task.** Web/PWA uses
+`Blob` + `<a download>` to export and `<input type="file">` to import. In
+Android's WebView `<a download>` doesn't work, so native export needs
+`@capacitor/filesystem` + `@capacitor/share`. The file input does work there.
+There is no `android/` project yet, so writing the native branch now would
+mean shipping untested code. The input's `accept=".json,application/json"`
+is only a hint, since some Android pickers ignore MIME types; Zod is the real
+check. The file name is `language-tutor-<src>-<tgt>-<YYYY-MM-DD>.json`. The
+JSON is indented, with rows sorted by `solvedAt`, so backups are
+deterministic and diffable. Export is always the full history, never the
+History level filter. It is disabled, with a hint, when there is nothing to
+export.
+
+**Import refuses files over 100 MB.** The limit guards against reading a
+wrongly picked file (a 2 GB video) into the WebView's memory; it is not a cap
+on data. Measured on the pretty-printed format: ~0.85 KB for a typical
+record, ~1.9 KB for a deliberately heavy one (four issues, three
+alternatives). That makes 100 MB ~55k–125k exercises, decades of daily use;
+`backup.test.ts` keeps that true (50k heavy records must fit) and parses a
+10k-record file in well under a second. 20 MB was considered and rejected: ~10k records is
+reachable by a consistent user within a couple of years. Up to that scale,
+`JSON.parse`, Zod and a single `bulkAdd` transaction take seconds at most
+(the UI shows a "validating…" state), so streaming or compression would be
+complexity with no real case. If the limit is ever hit, the error says so
+explicitly, and that's when to revisit.
+
+**Known debt, outside M7: History doesn't scale to thousands of rows.** M6
+loads and renders every record unpaginated, on the premise of "a few hundred
+rows". With a 10k-row import, History will slow down long before
+export/import does. Virtualize or paginate it when volume calls for it.
+
+**Lives in Settings, as a "Data" section next to the provider settings.**
+Export/import manage data; they aren't part of browsing History. Mock-mode
+exports (`aiModel: 'mock'`) are not guarded against being imported into the
+real dev origin: that is tooling for a case that only affects the developer.

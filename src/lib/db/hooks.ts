@@ -8,3 +8,8 @@ export function useExercises() {
     [],
   )
 }
+
+/** How many solved exercises are stored. `undefined` while loading. */
+export function useExerciseCount() {
+  return useLiveQuery(() => db.exercises.count(), [])
+}

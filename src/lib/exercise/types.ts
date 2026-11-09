@@ -67,7 +67,8 @@ export type CurrentExercise = z.infer<typeof CurrentExerciseSchema>
 
 /**
  * A solved exercise as stored in Dexie. `solvedAt` is a real `Date` here
- * (indexable); a JSON import would `.extend` this with `z.coerce.date()`.
+ * (indexable). The JSON backup format is deliberately not derived from this
+ * schema — see `src/lib/backup/format.ts` and DECISIONS.md M7.
  */
 export const ExerciseRecordSchema = ExerciseBaseSchema.extend({
   userTranslation: z.string(),

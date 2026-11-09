@@ -1,4 +1,5 @@
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { DataSettings } from './components/DataSettings'
 import { History } from './components/History'
 import { Practice } from './components/Practice'
 import { ProviderSettings } from './components/ProviderSettings'
@@ -27,7 +28,15 @@ function App() {
         <Routes>
           <Route path="/" element={<Practice />} />
           <Route path="/history" element={<History />} />
-          <Route path="/settings" element={<ProviderSettings />} />
+          <Route
+            path="/settings"
+            element={
+              <>
+                <ProviderSettings />
+                <DataSettings />
+              </>
+            }
+          />
         </Routes>
       </div>
     </BrowserRouter>
